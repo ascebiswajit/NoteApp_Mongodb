@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas Recording</title>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.8.1/dist/ffmpeg.min.js"></script>
+</head>
+<body>
+    <canvas id="canvas" style="height:300px;width:600px; background: #ccc;"></canvas>
+    <video id="myVideo" controls="controls"></video>
+    <a id="dl" href="" download="download.mp4"></a>
+    <div id="message"></div>
+    <button id="startRecording">Start Recording</button>
+    <button id="stopRecording">Stop Recording</button>
+
+    <script type="text/javascript">
+        const { createFFmpeg } = FFmpeg;
+        const ffmpeg = createFFmpeg({
+            log: true
+        });
+
+        let mediaRecorder;
+        let recording = false;
+
+        const transcode = async (webcamData) => {
+            const message = document.getElementById('message');
+            const name = 'record.webm';
+            await ffmpeg.load();
+            message.innerHTML = 'Start transcoding';
+            await ffmpeg.write(name, webcamData);
+            await ffmpeg.transcode(name,  'output.mp4');
+            message.innerHTML = 'Complete transcoding';
+            const data = ffmpeg.read('output.mp4');
+
+            const video = document.getElementById('output-video');
+            video.src = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+            dl.href = video.src;
+            dl.innerHTML = "download mp4"
+        }
+
+        function fn() {
+            var recordedChunks = [];
+
+            var time = 0;
+            var canvas = document.getElementById("canvas");
+
+            return new Promise(function (res, rej) {
+                var stream = canvas.captureStream(60);
+
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: "video/webm; codecs=vp9"
+                });
+
+                mediaRecorder.start(time);
+
+                mediaRecorder.ondataavailable = function (e) {
+                    recordedChunks.push(event.data);
+                    // for demo, removed stop() call to capture more than one frame
+                }
+
+                mediaRecorder.onstop = function (event) {
+                    var blob = new Blob(recordedChunks, {
+                        "type": "video/webm"
+                    });
+                    var url = URL.createObjectURL(blob);
+                    res({url, blob}); // resolve both blob and url in an object
+
+                    myVideo.src = url;
+                    // removed data url conversion for brevity
+                }
+
+                // for demo, draw random lines and then stop recording
+                var i = 0,
+                tid = setInterval(()=>{
+                    if(i++ > 200) { // draw 20 lines
+                        clearInterval(tid);
+                        mediaRecorder.stop();
+                    }
+                    let canvas = document.querySelector("canvas");
+                    let cx = canvas.getContext("2d");
+                    cx.beginPath();
+                    cx.strokeStyle = 'red';
+                    cx.moveTo(Math.random()*100, Math.random()*100);
+                    cx.lineTo(Math.random()*100, Math.random()*100);
+                    cx.stroke();
+                },200)
+
+            });
+        }
+
+        document.getElementById('startRecording').addEventListener('click', () => {
+            if (!recording) {
+                fn().then(async ({url, blob}) => {
+                    transcode(new Uint8Array(await (blob).arrayBuffer()));
+                });
+                recording = true;
+            }
+        });
+
+        document.getElementById('stopRecording').addEventListener('click', () => {
+            if (recording) {
+                mediaRecorder.stop();
+                recording = false;
+            }
+        });
+    </script>
+</body>
+</html>
